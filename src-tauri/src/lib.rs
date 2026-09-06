@@ -1,0 +1,122 @@
+mod commands;
+
+use commands::store::{
+    delete_command, get_commands, save_command, seed_defaults_if_empty, update_command,
+};
+use commands::exec::execute_shell_command;
+use commands::security::{
+    get_execution_history, get_trusted_programs, is_program_trusted, revoke_program, trust_program,
+};
+use commands::terminal::execute_in_terminal;
+use tauri::{
+    menu::{Menu, MenuItem},
+    tray::TrayIconBuilder,
+    Manager, WindowEvent,
+};
+use tauri_plugin_autostart::MacosLauncher;
+use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
+
+pub fn run() {
+    tauri::Builder::default()
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            toggle_main_window_visible(app, true);
+        }))
+        .plugin(tauri_plugin_autostart::init(MacosLauncher::LaunchAgent, None))
+        .plugin(tauri_plugin_store::Builder::default().build())
+        .plugin(tauri_plugin_opener::init())
+        .plugin(
+            tauri_plugin_global_shortcut::Builder::new()
+                .with_handler(|app, shortcut, event| {
+                    let toggle_shortcut =
+                        Shortcut::new(Some(Modifiers::CONTROL | Modifiers::ALT), Code::Space);
+
+                    if shortcut == &toggle_shortcut && event.state == ShortcutState::Pressed {
+                        toggle_main_window(app);
+                    }
+                })
+                .build(),
+        )
+        .setup(|app| {
+            let handle = app.handle();
+            seed_defaults_if_empty(handle)?;
+
+            let toggle_shortcut = Shortcut::new(Some(Modifiers::CONTROL | Modifiers::ALT), Code::Space);
+            app.global_shortcut().register(toggle_shortcut)?;
+
+            let show_item = MenuItem::with_id(app, "show", "Show DevFlow", true, None::<&str>)?;
+            let quit_item = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
+            let tray_menu = Menu::with_items(app, &[&show_item, &quit_item])?;
+
+            TrayIconBuilder::new()
+                .icon(app.default_window_icon().unwrap().clone())
+                .menu(&tray_menu)
+                .show_menu_on_left_click(false)
+                .on_menu_event(|app, event| match event.id.as_ref() {
+                    "show" => toggle_main_window_visible(app, true),
+                    "quit" => app.exit(0),
+                    _ => {}
+                })
+                .on_tray_icon_event(|tray, event| {
+                    if let tauri::tray::TrayIconEvent::Click {
+                        button: tauri::tray::MouseButton::Left,
+                        button_state: tauri::tray::MouseButtonState::Up,
+                        ..
+                    } = event
+                    {
+                        let app = tray.app_handle();
+                        toggle_main_window(app);
+                    }
+                })
+                .build(app)?;
+
+            if let Some(window) = app.get_webview_window("main") {
+                let window_clone = window.clone();
+                window.on_window_event(move |event| {
+                    if let WindowEvent::CloseRequested { api, .. } = event {
+                        api.prevent_close();
+                        let _ = window_clone.hide();
+                    }
+                });
+            }
+
+            Ok(())
+        })
+        .invoke_handler(tauri::generate_handler![
+            get_commands,
+            save_command,
+            update_command,
+            delete_command,
+            execute_shell_command,
+            is_program_trusted,
+            trust_program,
+            get_execution_history,
+            get_trusted_programs,
+            revoke_program,
+            execute_in_terminal,
+        ])
+        .run(tauri::generate_context!())
+        .expect("error while running tauri application");
+}
+
+fn toggle_main_window(app: &tauri::AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        let is_visible = window.is_visible().unwrap_or(false);
+        if is_visible {
+            let _ = window.hide();
+        } else {
+            let _ = window.show();
+            let _ = window.set_focus();
+        }
+    }
+}
+
+fn toggle_main_window_visible(app: &tauri::AppHandle, show: bool) {
+    if let Some(window) = app.get_webview_window("main") {
+        if show {
+            let _ = window.show();
+            let _ = window.set_focus();
+        } else {
+            let _ = window.hide();
+        }
+    }
+}

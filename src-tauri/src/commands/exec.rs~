@@ -1,0 +1,65 @@
+use serde::Serialize;
+use std::path::Path;
+use std::process::Stdio;
+use std::time::Duration;
+use tokio::process::Command as AsyncCommand;
+use tokio::time::timeout;
+
+const DEFAULT_TIMEOUT_SECS: u64 = 30;
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ExecutionResult {
+    pub stdout: String,
+    pub stderr: String,
+    pub exit_code: i32,
+    pub success: bool,
+    pub duration_ms: u128,
+}
+
+#[tauri::command]
+pub async fn execute_shell_command(
+    program: String,
+    args: Vec<String>,
+    cwd: Option<String>,
+    timeout_secs: Option<u64>,
+) -> Result<ExecutionResult, String> {
+    let program = program.trim();
+    if program.is_empty() {
+        return Err("Command name cannot be empty".to_string());
+    }
+
+    let mut command = AsyncCommand::new(program);
+    command
+        .args(&args)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+
+    if let Some(dir) = &cwd {
+        let path = Path::new(dir);
+        if !path.is_dir() {
+            return Err(format!("Working directory does not exist: {dir}"));
+        }
+        command.current_dir(path);
+    }
+
+    let start = std::time::Instant::now();
+
+    let child = command
+        .spawn()
+        .map_err(|e| format!("Failed to start '{program}': {e}"))?;
+
+    let wait_secs = timeout_secs.unwrap_or(DEFAULT_TIMEOUT_SECS);
+    let output = timeout(Duration::from_secs(wait_secs), child.wait_with_output())
+        .await
+        .map_err(|_| format!("'{program}' timed out after {wait_secs}s"))?
+        .map_err(|e| format!("Execution error while running '{program}': {e}"))?;
+
+    Ok(ExecutionResult {
+        stdout: String::from_utf8_lossy(&output.stdout).to_string(),
+        stderr: String::from_utf8_lossy(&output.stderr).to_string(),
+        exit_code: output.status.code().unwrap_or(-1),
+        success: output.status.success(),
+        duration_ms: start.elapsed().as_millis(),
+    })
+}
