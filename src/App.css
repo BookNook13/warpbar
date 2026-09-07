@@ -829,3 +829,16 @@ kbd {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* Cap the list's height so it scrolls internally instead of pushing
+   the output panel and footer below the visible window, no matter
+   how many commands exist. */
+.palette-list-wrap {
+  max-height: 280px;
+  overflow: hidden;
+}
+
+.palette-list {
+  max-height: 280px;
+  overflow-y: auto;
+}

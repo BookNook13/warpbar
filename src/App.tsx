@@ -337,7 +337,6 @@ export default function App() {
           break;
         case "Enter": {
           e.preventDefault();
-          document.title = `KEY-ENTER: ${results[selectedIndex]?.title ?? "none"} @ ${Date.now()}`;
           const cmd = results[selectedIndex];
           if (cmd) runCommand(cmd);
           break;
@@ -458,10 +457,7 @@ export default function App() {
                     onMouseLeave={() =>
                       setConfirmingDeleteId((prev) => (prev === cmd.id ? null : prev))
                     }
-                    onClick={() => {
-                      document.title = `CLICKED: ${cmd.title} @ ${Date.now()}`;
-                      runCommand(cmd);
-                    }}
+                    onClick={() => runCommand(cmd)}
                   >
                     <span className="item-title-wrap">
                       <ActionIcon action={cmd.action} />
@@ -559,7 +555,7 @@ function OutputPanel({ state }: { state: RunState }) {
       <div className="output-panel output-trust">
         <div className="danger-title">first time running "{state.program}"</div>
         <div className="danger-body">
-          DevFlow hasn't run this program before. Press <kbd>enter</kbd> to trust it and run —
+          Warpbar hasn't run this program before. Press <kbd>enter</kbd> to trust it and run —
           you won't be asked again for this program — or <kbd>esc</kbd> to cancel.
         </div>
       </div>
@@ -571,7 +567,7 @@ function OutputPanel({ state }: { state: RunState }) {
       <div className="output-panel output-trust">
         <div className="danger-title">first time running: {state.programs.join(", ")}</div>
         <div className="danger-body">
-          This workflow uses program(s) DevFlow hasn't run before. Press <kbd>enter</kbd> to
+          This workflow uses program(s) Warpbar hasn't run before. Press <kbd>enter</kbd> to
           trust all of them and run the workflow, or <kbd>esc</kbd> to cancel.
         </div>
       </div>

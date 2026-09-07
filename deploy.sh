@@ -1,8 +1,8 @@
 #!/bin/bash
 set -e
 
-echo "==> Killing any running DevFlow instances..."
-pkill -9 -f dev-flow 2>/dev/null || true
+echo "==> Killing any running Warpbar instances..."
+pkill -9 -f warpbar 2>/dev/null || true
 
 echo "==> Building release bundle..."
 npm run tauri build
@@ -17,4 +17,4 @@ fi
 echo "==> Installing $DEB_PATH..."
 sudo dpkg -i "$DEB_PATH"
 
-echo "==> Done. Launch DevFlow from the app menu, or run: dev-flow"
+echo "==> Done. Launch Warpbar from the app menu, or run: warpbar"
