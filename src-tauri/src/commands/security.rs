@@ -115,3 +115,34 @@ pub fn revoke_program(app: AppHandle, program: String) -> Result<(), String> {
     store.set(TRUSTED_KEY.to_string(), json!(trusted));
     store.save().map_err(|e| e.to_string())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn common_read_only_tools_are_on_the_safe_list() {
+        assert!(SAFE_LIST.contains(&"ls"));
+        assert!(SAFE_LIST.contains(&"cat"));
+        assert!(SAFE_LIST.contains(&"git"));
+        assert!(SAFE_LIST.contains(&"grep"));
+        assert!(SAFE_LIST.contains(&"whoami"));
+    }
+
+    #[test]
+    fn destructive_or_privileged_programs_are_never_on_the_safe_list() {
+        // These must always require explicit trust — accidentally
+        // adding one of these to SAFE_LIST would silently disable
+        // the trust-on-first-use protection for it.
+        assert!(!SAFE_LIST.contains(&"sudo"));
+        assert!(!SAFE_LIST.contains(&"rm"));
+        assert!(!SAFE_LIST.contains(&"dd"));
+        assert!(!SAFE_LIST.contains(&"chmod"));
+        assert!(!SAFE_LIST.contains(&"chown"));
+        assert!(!SAFE_LIST.contains(&"shutdown"));
+        assert!(!SAFE_LIST.contains(&"reboot"));
+        assert!(!SAFE_LIST.contains(&"mkfs"));
+        assert!(!SAFE_LIST.contains(&"bash"));
+        assert!(!SAFE_LIST.contains(&"sh"));
+    }
+}

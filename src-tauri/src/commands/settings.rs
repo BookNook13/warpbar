@@ -131,3 +131,92 @@ pub fn update_hotkey(
     store.set(SETTINGS_KEY.to_string(), serde_json::to_value(&settings).unwrap());
     store.save().map_err(|e| e.to_string())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_a_simple_ctrl_alt_space_combo() {
+        let result = parse_hotkey("ctrl+alt+space");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn parses_a_single_letter_key_with_one_modifier() {
+        let result = parse_hotkey("ctrl+k");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn parses_a_digit_key() {
+        let result = parse_hotkey("ctrl+alt+5");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn is_case_insensitive_and_trims_whitespace() {
+        // Mirrors how the frontend sends captured combos — user input
+        // could plausibly have mixed case or stray spaces around '+'.
+        let lower = parse_hotkey("ctrl+alt+space");
+        let upper = parse_hotkey("CTRL + ALT + SPACE");
+        assert!(lower.is_ok());
+        assert!(upper.is_ok());
+    }
+
+    #[test]
+    fn accepts_super_and_its_aliases() {
+        assert!(parse_hotkey("super+space").is_ok());
+        assert!(parse_hotkey("meta+space").is_ok());
+        assert!(parse_hotkey("cmd+space").is_ok());
+    }
+
+    #[test]
+    fn rejects_a_hotkey_with_no_modifier() {
+        // A bare key with no Ctrl/Alt/Shift/Super would either
+        // conflict with normal typing or fail to register as a true
+        // global shortcut — this must always be rejected.
+        let result = parse_hotkey("space");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn rejects_an_unknown_modifier() {
+        let result = parse_hotkey("hyper+space");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn rejects_an_unsupported_key() {
+        let result = parse_hotkey("ctrl+alt+f13");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn rejects_an_empty_string() {
+        let result = parse_hotkey("");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn accepts_multiple_modifiers_stacked() {
+        let result = parse_hotkey("ctrl+alt+shift+k");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn accepts_enter_tab_and_escape_as_named_keys() {
+        assert!(parse_hotkey("ctrl+enter").is_ok());
+        assert!(parse_hotkey("ctrl+tab").is_ok());
+        assert!(parse_hotkey("ctrl+escape").is_ok());
+        assert!(parse_hotkey("ctrl+esc").is_ok());
+    }
+
+    #[test]
+    fn default_settings_have_sane_values() {
+        let defaults = AppSettings::default();
+        assert_eq!(defaults.hotkey, "ctrl+alt+space");
+        assert!(defaults.confirm_dangerous);
+        assert_eq!(defaults.command_timeout_secs, 30);
+    }
+}
