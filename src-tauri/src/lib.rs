@@ -8,13 +8,17 @@ use commands::security::{
     get_execution_history, get_trusted_programs, is_program_trusted, revoke_program, trust_program,
 };
 use commands::terminal::execute_in_terminal;
+use commands::settings::{
+    get_settings, parse_hotkey, update_hotkey, update_settings, ActiveHotkey, AppSettings,
+};
+use std::sync::Mutex;
 use tauri::{
     menu::{Menu, MenuItem},
     tray::TrayIconBuilder,
     Manager, WindowEvent,
 };
 use tauri_plugin_autostart::MacosLauncher;
-use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
+use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 
 pub fn run() {
     tauri::Builder::default()
@@ -27,10 +31,12 @@ pub fn run() {
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
                 .with_handler(|app, shortcut, event| {
-                    let toggle_shortcut =
-                        Shortcut::new(Some(Modifiers::CONTROL | Modifiers::ALT), Code::Space);
-
-                    if shortcut == &toggle_shortcut && event.state == ShortcutState::Pressed {
+                    if event.state != ShortcutState::Pressed {
+                        return;
+                    }
+                    let active = app.state::<ActiveHotkey>();
+                    let Ok(current) = active.0.lock() else { return };
+                    if shortcut == &*current {
                         toggle_main_window(app);
                     }
                 })
@@ -40,10 +46,14 @@ pub fn run() {
             let handle = app.handle();
             seed_defaults_if_empty(handle)?;
 
-            let toggle_shortcut = Shortcut::new(Some(Modifiers::CONTROL | Modifiers::ALT), Code::Space);
-            app.global_shortcut().register(toggle_shortcut)?;
+            let settings: AppSettings = get_settings(handle.clone()).unwrap_or_default();
+            let initial_shortcut = parse_hotkey(&settings.hotkey)
+                .unwrap_or_else(|_| parse_hotkey("ctrl+alt+space").unwrap());
 
-            let show_item = MenuItem::with_id(app, "show", "Show DevFlow", true, None::<&str>)?;
+            app.global_shortcut().register(initial_shortcut)?;
+            app.manage(ActiveHotkey(Mutex::new(initial_shortcut)));
+
+            let show_item = MenuItem::with_id(app, "show", "Show Warpbar", true, None::<&str>)?;
             let quit_item = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
             let tray_menu = Menu::with_items(app, &[&show_item, &quit_item])?;
 
@@ -93,6 +103,9 @@ pub fn run() {
             get_trusted_programs,
             revoke_program,
             execute_in_terminal,
+            get_settings,
+            update_settings,
+            update_hotkey,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

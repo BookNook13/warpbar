@@ -6,6 +6,7 @@ import { CommandAction, DevFlowCommand } from "./types/command";
 import { AddCommandModal } from "./components/AddCommandModal";
 import { AutostartToggle } from "./components/AutostartToggle";
 import { TrustManager } from "./components/TrustManager";
+import { SettingsPanel } from "./components/SettingsPanel";
 import { isDangerousCommand, needsInteractiveTerminal } from "./lib/dangerCheck";
 import { parseCommandString } from "./lib/parseCommand";
 import "./App.css";
@@ -23,6 +24,12 @@ interface WorkflowStepResult {
   step: string;
   success: boolean;
   exit_code: number;
+}
+
+interface AppSettings {
+  hotkey: string;
+  confirmDangerous: boolean;
+  commandTimeoutSecs: number;
 }
 
 type RunState =
@@ -71,8 +78,14 @@ export default function App() {
   const [runState, setRunState] = useState<RunState>({ status: "idle" });
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isTrustManagerOpen, setIsTrustManagerOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [editingCommand, setEditingCommand] = useState<DevFlowCommand | undefined>();
   const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
+  const [settings, setSettings] = useState<AppSettings>({
+    hotkey: "ctrl+alt+space",
+    confirmDangerous: true,
+    commandTimeoutSecs: 30,
+  });
 
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
@@ -82,7 +95,16 @@ export default function App() {
   useEffect(() => {
     load();
     inputRef.current?.focus();
+    invoke<AppSettings>("get_settings")
+      .then(setSettings)
+      .catch(() => {});
   }, [load]);
+
+  const refreshSettings = useCallback(() => {
+    invoke<AppSettings>("get_settings")
+      .then(setSettings)
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     setSelectedIndex((prev) => Math.min(prev, Math.max(results.length - 1, 0)));
@@ -93,14 +115,21 @@ export default function App() {
     el?.scrollIntoView({ block: "nearest" });
   }, [selectedIndex]);
 
-  const runSingleShell = useCallback(async (program: string, args: string[]) => {
-    if (needsInteractiveTerminal(program, args)) {
-      const terminalName = await invoke<string>("execute_in_terminal", { program, args });
-      return { terminal: terminalName as string | null, result: null as ExecutionResult | null };
-    }
-    const result = await invoke<ExecutionResult>("execute_shell_command", { program, args });
-    return { terminal: null, result };
-  }, []);
+  const runSingleShell = useCallback(
+    async (program: string, args: string[]) => {
+      if (needsInteractiveTerminal(program, args)) {
+        const terminalName = await invoke<string>("execute_in_terminal", { program, args });
+        return { terminal: terminalName as string | null, result: null as ExecutionResult | null };
+      }
+      const result = await invoke<ExecutionResult>("execute_shell_command", {
+        program,
+        args,
+        timeoutSecs: settings.commandTimeoutSecs,
+      });
+      return { terminal: null, result };
+    },
+    [settings.commandTimeoutSecs]
+  );
 
   const executeShellNow = useCallback(
     async (cmd: DevFlowCommand) => {
@@ -153,6 +182,7 @@ export default function App() {
           const result = await invoke<ExecutionResult>("execute_shell_command", {
             program: action.cmd,
             args: action.args,
+            timeoutSecs: settings.commandTimeoutSecs,
           });
           stepResults.push({ step: steps[i], success: result.success, exit_code: result.exit_code });
           if (!result.success) {
@@ -167,7 +197,7 @@ export default function App() {
         setRunState({ status: "error", message: String(err) });
       }
     },
-    [recordUsage]
+    [recordUsage, settings.commandTimeoutSecs]
   );
 
   const executeOpenNow = useCallback(
@@ -192,16 +222,18 @@ export default function App() {
   const proceedPastTrust = useCallback(
     (cmd: DevFlowCommand) => {
       if (cmd.action.type === "shell") {
-        if (isDangerousCommand(cmd.action.cmd, cmd.action.args)) {
+        if (settings.confirmDangerous && isDangerousCommand(cmd.action.cmd, cmd.action.args)) {
           setRunState({ status: "confirm-danger", cmd });
           return;
         }
         executeShellNow(cmd);
       } else if (cmd.action.type === "workflow") {
-        const anyDangerous = cmd.action.steps.some((step) => {
-          const a = parseCommandString(step);
-          return a.type === "shell" && isDangerousCommand(a.cmd, a.args);
-        });
+        const anyDangerous =
+          settings.confirmDangerous &&
+          cmd.action.steps.some((step) => {
+            const a = parseCommandString(step);
+            return a.type === "shell" && isDangerousCommand(a.cmd, a.args);
+          });
         if (anyDangerous) {
           setRunState({ status: "confirm-danger", cmd });
           return;
@@ -211,7 +243,7 @@ export default function App() {
         executeOpenNow(cmd);
       }
     },
-    [executeShellNow, executeWorkflowNow, executeOpenNow]
+    [executeShellNow, executeWorkflowNow, executeOpenNow, settings.confirmDangerous]
   );
 
   const runCommand = useCallback(
@@ -269,7 +301,7 @@ export default function App() {
 
   useEffect(() => {
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
-      if (isAddModalOpen || isTrustManagerOpen) return;
+      if (isAddModalOpen || isTrustManagerOpen || isSettingsOpen) return;
 
       if (e.key === "n" && (e.ctrlKey || e.metaKey)) {
         e.preventDefault();
@@ -359,6 +391,7 @@ export default function App() {
     proceedPastTrust,
     isAddModalOpen,
     isTrustManagerOpen,
+    isSettingsOpen,
   ]);
 
   const statusLabel = useMemo(() => {
@@ -387,7 +420,7 @@ export default function App() {
     <div className="palette-root">
       <div className="brand">
         <span className="brand-mark" />
-        <span className="brand-name">devflow</span>
+        <span className="brand-name">warpbar</span>
       </div>
 
       <div className="palette-frame">
@@ -404,6 +437,17 @@ export default function App() {
               <kbd>ctrl</kbd>
               <kbd>n</kbd>
             </span>
+            <button
+              className="add-command-btn"
+              onClick={() => setIsSettingsOpen(true)}
+              title="Settings"
+              type="button"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="3" />
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+              </svg>
+            </button>
             <button
               className="add-command-btn"
               onClick={() => setIsTrustManagerOpen(true)}
@@ -524,9 +568,10 @@ export default function App() {
               <kbd>esc</kbd> dismiss
             </span>
             <span className="key-hint">
-              <kbd>ctrl</kbd>
-              <kbd>alt</kbd>
-              <kbd>space</kbd> toggle window
+              <kbd>{settings.hotkey.split("+")[0]}</kbd>
+              {settings.hotkey.split("+").length > 1 && <kbd>{settings.hotkey.split("+")[1]}</kbd>}
+              {settings.hotkey.split("+").length > 2 && <kbd>{settings.hotkey.split("+")[2]}</kbd>}
+              toggle window
             </span>
           </div>
         </div>
@@ -543,6 +588,15 @@ export default function App() {
       )}
 
       {isTrustManagerOpen && <TrustManager onClose={() => setIsTrustManagerOpen(false)} />}
+
+      {isSettingsOpen && (
+        <SettingsPanel
+          onClose={() => {
+            setIsSettingsOpen(false);
+            refreshSettings();
+          }}
+        />
+      )}
     </div>
   );
 }

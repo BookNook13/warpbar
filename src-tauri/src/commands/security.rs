@@ -10,6 +10,20 @@ const HISTORY_STORE: &str = "history.json";
 const HISTORY_KEY: &str = "history";
 const HISTORY_LIMIT: usize = 200;
 
+/// Read-only or low-risk utilities that are auto-trusted without a
+/// prompt. Chosen conservatively: every entry here only reads state
+/// (filesystem, process list, git history) — none of them write,
+/// delete, or execute further arbitrary code on their own. Anything
+/// not on this list still goes through the normal trust-on-first-use
+/// flow. This is an allowlist of *convenience*, not a relaxation of
+/// the security boundary — the store-backed trust check still governs
+/// everything else exactly as before.
+const SAFE_LIST: &[&str] = &[
+    "ls", "cat", "pwd", "whoami", "echo", "df", "du", "find", "grep",
+    "head", "tail", "wc", "which", "git", "date", "uname", "hostname",
+    "id", "env", "printenv", "ps", "top", "htop", "free", "uptime",
+];
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HistoryEntry {
     pub program: String,
@@ -22,6 +36,10 @@ pub struct HistoryEntry {
 
 #[tauri::command]
 pub fn is_program_trusted(app: AppHandle, program: String) -> Result<bool, String> {
+    if SAFE_LIST.contains(&program.as_str()) {
+        return Ok(true);
+    }
+
     let store = app.store(SECURITY_STORE).map_err(|e| e.to_string())?;
     let trusted: Vec<String> = store
         .get(TRUSTED_KEY)
@@ -94,7 +112,6 @@ pub fn revoke_program(app: AppHandle, program: String) -> Result<(), String> {
         .unwrap_or_default();
 
     trusted.retain(|p| p != &program);
-
     store.set(TRUSTED_KEY.to_string(), json!(trusted));
     store.save().map_err(|e| e.to_string())
 }

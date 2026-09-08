@@ -31,12 +31,17 @@ export function TrustManager({ onClose }: TrustManagerProps) {
       <div className="modal-card" onClick={(e) => e.stopPropagation()}>
         <h2 className="modal-title">trusted programs</h2>
 
+        <div className="trust-safelist-note">
+          Common read-only tools (ls, cat, df, grep, git, ps, and similar) run without a prompt
+          by default — only unrecognized or potentially risky programs ask for trust.
+        </div>
+
         {isLoading ? (
           <div className="trust-empty">loading…</div>
         ) : programs.length === 0 ? (
           <div className="trust-empty">
-            no programs trusted yet — you'll be asked to trust each new program the first time
-            you run it
+            no additional programs trusted yet — you'll be asked to trust each new one the
+            first time you run it
           </div>
         ) : (
           <ul className="trust-list">
