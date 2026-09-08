@@ -116,3 +116,11 @@ Issues and pull requests are welcome. This project is still evolving — planned
 ## License
 
 MIT
+
+## Running tests
+
+```bash
+npm run test
+```
+
+Covers command parsing (including compound `&&`/`|`/`;` commands), fuzzy search scoring, and destructive-command/interactive-terminal detection — the logic most prone to regression.
