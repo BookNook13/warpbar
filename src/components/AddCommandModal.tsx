@@ -1,6 +1,6 @@
 import { useState, FormEvent } from "react";
 import { useCommandStore } from "../store/commandStore";
-import { CommandAction, DevFlowCommand } from "../types/command";
+import { CommandAction, CwdMode, DevFlowCommand } from "../types/command";
 import { parseCommandString, commandActionToString } from "../lib/parseCommand";
 
 interface AddCommandModalProps {
@@ -38,6 +38,8 @@ export function AddCommandModal({ onClose, editingCommand }: AddCommandModalProp
   const [keywordsInput, setKeywordsInput] = useState(
     editingCommand?.keywords.join(", ") ?? ""
   );
+  const [cwdMode, setCwdMode] = useState<CwdMode | "none">(editingCommand?.cwdMode ?? "none");
+  const [cwdPath, setCwdPath] = useState(editingCommand?.cwdPath ?? "");
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -79,10 +81,20 @@ export function AddCommandModal({ onClose, editingCommand }: AddCommandModalProp
       action = { type: "open", path: trimmedPath };
     }
 
+    if (actionKind === "shell" && cwdMode === "fixed" && !cwdPath.trim()) {
+      setError("Enter a directory path, or choose a different working-directory option.");
+      return;
+    }
+
     const keywords = keywordsInput
       .split(",")
       .map((k) => k.trim())
       .filter(Boolean);
+
+    const cwdFields =
+      actionKind === "shell" && cwdMode !== "none"
+        ? { cwdMode: cwdMode as CwdMode, cwdPath: cwdMode === "fixed" ? cwdPath.trim() : undefined }
+        : { cwdMode: undefined, cwdPath: undefined };
 
     setIsSaving(true);
     try {
@@ -93,6 +105,7 @@ export function AddCommandModal({ onClose, editingCommand }: AddCommandModalProp
           subtitle: subtitle.trim() || undefined,
           keywords,
           action,
+          ...cwdFields,
         });
       } else {
         await add({
@@ -101,6 +114,7 @@ export function AddCommandModal({ onClose, editingCommand }: AddCommandModalProp
           keywords,
           action,
           isCustom: true,
+          ...cwdFields,
         });
       }
       onClose();
@@ -187,6 +201,50 @@ export function AddCommandModal({ onClose, editingCommand }: AddCommandModalProp
                 placeholder="e.g. https://github.com or /home/you/notes.md"
               />
             </label>
+          )}
+
+          {actionKind === "shell" && (
+            <div className="modal-label">
+              working directory
+              <div className="cwd-mode-tabs">
+                <button
+                  type="button"
+                  className={cwdMode === "none" ? "cwd-mode-tab active" : "cwd-mode-tab"}
+                  onClick={() => setCwdMode("none")}
+                >
+                  default
+                </button>
+                <button
+                  type="button"
+                  className={cwdMode === "fixed" ? "cwd-mode-tab active" : "cwd-mode-tab"}
+                  onClick={() => setCwdMode("fixed")}
+                >
+                  fixed path
+                </button>
+                <button
+                  type="button"
+                  className={cwdMode === "lastShell" ? "cwd-mode-tab active" : "cwd-mode-tab"}
+                  onClick={() => setCwdMode("lastShell")}
+                >
+                  last shell dir
+                </button>
+              </div>
+              {cwdMode === "fixed" && (
+                <input
+                  className="modal-input"
+                  style={{ marginTop: 8 }}
+                  value={cwdPath}
+                  onChange={(e) => setCwdPath(e.target.value)}
+                  placeholder="/home/you/projects/my-app"
+                />
+              )}
+              {cwdMode === "lastShell" && (
+                <div className="cwd-hint">
+                  Runs in whatever directory your terminal was last in — requires the shell
+                  integration hook (Settings → Shell Integration).
+                </div>
+              )}
+            </div>
           )}
 
           <label className="modal-label">

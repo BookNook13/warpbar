@@ -20,4 +20,11 @@ pub struct DevFlowCommand {
     pub use_count: u32,
     pub last_used_at: Option<i64>,
     pub created_at: i64,
+    /// "fixed" (use cwd_path verbatim) or "lastShell" (use whatever the
+    /// shell-integration hook last recorded). None means no working
+    /// directory override — behaves exactly as before this feature.
+    /// Both fields are optional and default to None when absent from
+    /// older stored commands, so this is fully backward-compatible.
+    pub cwd_mode: Option<String>,
+    pub cwd_path: Option<String>,
 }

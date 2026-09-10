@@ -19,36 +19,45 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
   const [capturedCombo, setCapturedCombo] = useState<string | null>(null);
   const [hotkeyError, setHotkeyError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [shellHookStatus, setShellHookStatus] = useState<{ path: string; age_secs: number } | null | "checking">("checking");
 
   useEffect(() => {
     invoke<AppSettings>("get_settings").then(setSettings);
   }, []);
 
-  const captureKey = useCallback(
-    (e: React.KeyboardEvent) => {
-      e.preventDefault();
-      if (MODIFIER_KEYS.has(e.key)) return;
+  const checkShellHook = useCallback(() => {
+    setShellHookStatus("checking");
+    invoke<{ path: string; age_secs: number } | null>("get_last_shell_dir")
+      .then(setShellHookStatus)
+      .catch(() => setShellHookStatus(null));
+  }, []);
 
-      const parts: string[] = [];
-      if (e.ctrlKey) parts.push("ctrl");
-      if (e.altKey) parts.push("alt");
-      if (e.shiftKey) parts.push("shift");
-      if (e.metaKey) parts.push("super");
+  useEffect(() => {
+    checkShellHook();
+  }, [checkShellHook]);
 
-      if (parts.length === 0) {
-        setHotkeyError("Include at least one modifier (Ctrl, Alt, Shift, or Super).");
-        return;
-      }
+  const captureKey = useCallback((e: React.KeyboardEvent) => {
+    e.preventDefault();
+    if (MODIFIER_KEYS.has(e.key)) return;
 
-      const key = e.key.length === 1 ? e.key.toLowerCase() : e.key.toLowerCase();
-      parts.push(key === " " ? "space" : key);
+    const parts: string[] = [];
+    if (e.ctrlKey) parts.push("ctrl");
+    if (e.altKey) parts.push("alt");
+    if (e.shiftKey) parts.push("shift");
+    if (e.metaKey) parts.push("super");
 
-      setHotkeyError(null);
-      setCapturedCombo(parts.join("+"));
-      setIsCapturing(false);
-    },
-    []
-  );
+    if (parts.length === 0) {
+      setHotkeyError("Include at least one modifier (Ctrl, Alt, Shift, or Super).");
+      return;
+    }
+
+    const key = e.key.length === 1 ? e.key.toLowerCase() : e.key.toLowerCase();
+    parts.push(key === " " ? "space" : key);
+
+    setHotkeyError(null);
+    setCapturedCombo(parts.join("+"));
+    setIsCapturing(false);
+  }, []);
 
   const applyHotkey = async () => {
     if (!capturedCombo || !settings) return;
@@ -180,6 +189,58 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
               <option value={300}>5 minutes</option>
             </select>
           </div>
+        </div>
+
+        <div className="settings-section">
+          <div className="settings-label">Shell integration</div>
+          <div className="settings-sublabel" style={{ marginBottom: 10 }}>
+            Lets commands run in "last shell directory" mode — wherever your terminal was
+            last active, not a fixed path.
+          </div>
+
+          <div className="shell-hook-status">
+            {shellHookStatus === "checking" && "checking…"}
+            {shellHookStatus === null && "not detected — install the hook below"}
+            {shellHookStatus && shellHookStatus !== "checking" && (
+              <>
+                connected — last updated {shellHookStatus.age_secs}s ago
+                <span className="cwd-hint" style={{ display: "block", marginTop: 2 }}>
+                  {shellHookStatus.path}
+                </span>
+              </>
+            )}
+          </div>
+
+          <div className="settings-sublabel" style={{ marginTop: 10, marginBottom: 4 }}>
+            bash — add to ~/.bashrc:
+          </div>
+          <textarea
+            className="modal-input modal-textarea shell-hook-code"
+            readOnly
+            rows={3}
+            onFocus={(e) => e.target.select()}
+            value={`mkdir -p "$HOME/.cache/warpbar"\nwarpbar_track_dir() { pwd > "$HOME/.cache/warpbar/last_dir" 2>/dev/null; }\nPROMPT_COMMAND="warpbar_track_dir\${PROMPT_COMMAND:+;$PROMPT_COMMAND}"`}
+          />
+
+          <div className="settings-sublabel" style={{ marginTop: 10, marginBottom: 4 }}>
+            zsh — add to ~/.zshrc:
+          </div>
+          <textarea
+            className="modal-input modal-textarea shell-hook-code"
+            readOnly
+            rows={4}
+            onFocus={(e) => e.target.select()}
+            value={`mkdir -p "$HOME/.cache/warpbar"\nwarpbar_track_dir() { pwd > "$HOME/.cache/warpbar/last_dir" 2>/dev/null; }\nautoload -Uz add-zsh-hook\nadd-zsh-hook precmd warpbar_track_dir`}
+          />
+
+          <button
+            type="button"
+            className="modal-btn modal-btn-secondary"
+            style={{ marginTop: 10 }}
+            onClick={checkShellHook}
+          >
+            re-check status
+          </button>
         </div>
 
         <div className="modal-actions">

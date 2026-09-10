@@ -11,6 +11,7 @@ use commands::terminal::execute_in_terminal;
 use commands::settings::{
     get_settings, parse_hotkey, update_hotkey, update_settings, ActiveHotkey, AppSettings,
 };
+use commands::shell_context::get_last_shell_dir;
 use std::sync::Mutex;
 use tauri::{
     menu::{Menu, MenuItem},
@@ -106,6 +107,7 @@ pub fn run() {
             get_settings,
             update_settings,
             update_hotkey,
+            get_last_shell_dir,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

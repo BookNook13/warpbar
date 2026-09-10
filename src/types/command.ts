@@ -3,6 +3,8 @@ export type CommandAction =
   | { type: "workflow"; steps: string[] }
   | { type: "open"; path: string };
 
+export type CwdMode = "fixed" | "lastShell";
+
 export interface DevFlowCommand {
   id: string;
   title: string;
@@ -13,4 +15,6 @@ export interface DevFlowCommand {
   useCount: number;
   lastUsedAt?: number;
   createdAt: number;
+  cwdMode?: CwdMode;
+  cwdPath?: string;
 }

@@ -115,15 +115,33 @@ export default function App() {
     el?.scrollIntoView({ block: "nearest" });
   }, [selectedIndex]);
 
+  const resolveCwd = useCallback(async (cmd: DevFlowCommand): Promise<string | undefined> => {
+    if (cmd.cwdMode === "fixed" && cmd.cwdPath) {
+      return cmd.cwdPath;
+    }
+    if (cmd.cwdMode === "lastShell") {
+      try {
+        const info = await invoke<{ path: string; age_secs: number } | null>(
+          "get_last_shell_dir"
+        );
+        return info?.path;
+      } catch {
+        return undefined;
+      }
+    }
+    return undefined;
+  }, []);
+
   const runSingleShell = useCallback(
-    async (program: string, args: string[]) => {
+    async (program: string, args: string[], cwd?: string) => {
       if (needsInteractiveTerminal(program, args)) {
-        const terminalName = await invoke<string>("execute_in_terminal", { program, args });
+        const terminalName = await invoke<string>("execute_in_terminal", { program, args, cwd });
         return { terminal: terminalName as string | null, result: null as ExecutionResult | null };
       }
       const result = await invoke<ExecutionResult>("execute_shell_command", {
         program,
         args,
+        cwd,
         timeoutSecs: settings.commandTimeoutSecs,
       });
       return { terminal: null, result };
@@ -136,7 +154,8 @@ export default function App() {
       if (cmd.action.type !== "shell") return;
       setRunState({ status: "running" });
       try {
-        const { terminal, result } = await runSingleShell(cmd.action.cmd, cmd.action.args);
+        const cwd = await resolveCwd(cmd);
+        const { terminal, result } = await runSingleShell(cmd.action.cmd, cmd.action.args, cwd);
         if (terminal) {
           setRunState({ status: "opened-terminal", terminalName: terminal });
         } else if (result) {
@@ -147,7 +166,7 @@ export default function App() {
         setRunState({ status: "error", message: String(err) });
       }
     },
-    [runSingleShell, recordUsage]
+    [runSingleShell, resolveCwd, recordUsage]
   );
 
   const executeWorkflowNow = useCallback(

@@ -88,6 +88,8 @@ pub fn seed_defaults_if_empty(app: &AppHandle) -> Result<(), String> {
             use_count: 0,
             last_used_at: None,
             created_at: now_ms(),
+            cwd_mode: None,
+            cwd_path: None,
         },
         DevFlowCommand {
             id: uuid::Uuid::new_v4().to_string(),
@@ -102,6 +104,8 @@ pub fn seed_defaults_if_empty(app: &AppHandle) -> Result<(), String> {
             use_count: 0,
             last_used_at: None,
             created_at: now_ms(),
+            cwd_mode: None,
+            cwd_path: None,
         },
     ];
 
