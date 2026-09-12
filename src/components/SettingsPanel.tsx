@@ -21,6 +21,13 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
   const [isSaving, setIsSaving] = useState(false);
   const [shellHookStatus, setShellHookStatus] = useState<{ path: string; age_secs: number } | null | "checking">("checking");
 
+  const [isExporting, setIsExporting] = useState(false);
+  const [exportResult, setExportResult] = useState<string | null>(null);
+  const [importPath, setImportPath] = useState("");
+  const [isImporting, setIsImporting] = useState(false);
+  const [importResult, setImportResult] = useState<string | null>(null);
+  const [importError, setImportError] = useState<string | null>(null);
+
   useEffect(() => {
     invoke<AppSettings>("get_settings").then(setSettings);
   }, []);
@@ -86,6 +93,41 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
     const updated = { ...settings, commandTimeoutSecs: value };
     setSettings(updated);
     await invoke("update_settings", { settings: updated });
+  };
+
+  const handleExport = async () => {
+    setIsExporting(true);
+    setExportResult(null);
+    try {
+      const path = await invoke<string>("export_backup");
+      setExportResult(path);
+    } catch (err) {
+      setExportResult(`Export failed: ${err}`);
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const handleImport = async () => {
+    if (!importPath.trim()) return;
+    setIsImporting(true);
+    setImportResult(null);
+    setImportError(null);
+    try {
+      const summary = await invoke<{
+        commands_added: number;
+        commands_skipped: number;
+        programs_added: number;
+      }>("import_backup", { path: importPath.trim() });
+      setImportResult(
+        `${summary.commands_added} command(s) added, ${summary.commands_skipped} already existed, ${summary.programs_added} trusted program(s) added.`
+      );
+      setImportPath("");
+    } catch (err) {
+      setImportError(String(err));
+    } finally {
+      setIsImporting(false);
+    }
   };
 
   if (!settings) return null;
@@ -241,6 +283,49 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
           >
             re-check status
           </button>
+        </div>
+
+        <div className="settings-section">
+          <div className="settings-label">Backup & restore</div>
+          <div className="settings-sublabel" style={{ marginBottom: 10 }}>
+            Export saves all your commands and trusted programs to a file in
+            ~/Warpbar-Backups. Import merges a backup back in — existing commands are never
+            overwritten, only new ones are added.
+          </div>
+
+          <button
+            type="button"
+            className="modal-btn modal-btn-secondary"
+            onClick={handleExport}
+            disabled={isExporting}
+          >
+            {isExporting ? "exporting…" : "export backup"}
+          </button>
+
+          {exportResult && <div className="cwd-hint" style={{ marginTop: 6 }}>{exportResult}</div>}
+
+          <div className="settings-sublabel" style={{ marginTop: 14, marginBottom: 4 }}>
+            import from file path:
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <input
+              className="modal-input"
+              value={importPath}
+              onChange={(e) => setImportPath(e.target.value)}
+              placeholder="/home/you/Warpbar-Backups/warpbar-backup-....json"
+            />
+            <button
+              type="button"
+              className="modal-btn modal-btn-secondary"
+              onClick={handleImport}
+              disabled={isImporting || !importPath.trim()}
+            >
+              {isImporting ? "importing…" : "import"}
+            </button>
+          </div>
+
+          {importResult && <div className="cwd-hint" style={{ marginTop: 6 }}>{importResult}</div>}
+          {importError && <div className="modal-error" style={{ marginTop: 6 }}>{importError}</div>}
         </div>
 
         <div className="modal-actions">
