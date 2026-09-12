@@ -365,6 +365,8 @@ kbd {
 
 .modal-card {
   width: 420px;
+  max-height: 80vh;
+  overflow-y: auto;
   background: var(--bg-elevated);
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-lg);
